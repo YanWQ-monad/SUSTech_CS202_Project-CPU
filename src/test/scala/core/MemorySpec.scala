@@ -22,11 +22,17 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
     dut.io.memWidth.poke(width)
     dut.io.unsigned.poke(unsigned)
 
+    dut.clock.step(1)
     dut.io.dataOut
   }
 
+  def getMemory: Memory = {
+    implicit val debugMode = true
+    new Memory(32)
+  }
+
   it should "read and write word" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
       write(4.U, 0x01020304.S, MemWidth.Word)
       read(4.U, MemWidth.Word, true.B).expect(0x01020304.S)
@@ -34,7 +40,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "read and write half-word" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
       write(4.U, 0x0102.S, MemWidth.Half)
       read(4.U, MemWidth.Half, true.B).expect(0x0102.S)
@@ -45,7 +51,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "read and write byte" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       for (i <- 0 until 8) {
@@ -56,7 +62,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "read little endian in half-word" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0x01020304.S, MemWidth.Word)
@@ -66,7 +72,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "write little endian in half-word" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0x0304.S, MemWidth.Half)
@@ -76,7 +82,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "read little endian in byte" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0x01020304.S, MemWidth.Word)
@@ -88,7 +94,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "write little endian in byte" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0x04.S, MemWidth.Byte)
@@ -100,7 +106,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "partial write of half-word" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0x01020304.S, MemWidth.Word)
@@ -112,7 +118,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "partial write of byte" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0x01020304.S, MemWidth.Word)
@@ -128,7 +134,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "read signed half-word" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0xF000F000.S, MemWidth.Word)
@@ -138,7 +144,7 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   it should "read signed byte" in {
-    test(new Memory(32)) { implicit dut =>
+    test(getMemory) { implicit dut =>
       dut.io.enable.poke(true.B)
 
       write(4.U, 0xF0F0F0F0.S, MemWidth.Word)

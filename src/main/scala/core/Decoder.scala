@@ -80,8 +80,8 @@ class Decoder extends Module {
 
   val X = DontCare  // short name for "don't care"
 
-  io.invalid := true.B
   set(rs1, X, X, 0.B, 0.B, X, 0.B, X, X, X, X, 0.B, 0.B, X, X, 0.B)  // default
+  io.invalid := true.B
 
   /* rs1, imm, immPC, B, J, useReg, link, useImm, useALU, cmpType, aluType, memWrite, memLoad, regWrite */
   switch (opcode)
@@ -99,7 +99,7 @@ class Decoder extends Module {
     }
     .is ("b1100011".U) {  // branches
       def setBranch(cmpType: Data): Unit =
-        set(rs1, immB, X, 1.B, 0.B, 0.B, 0.B, 0.B, X, cmpType, X, 0.B, 0.B, X, X, 0.B)
+        set(rs1, X, immB, 1.B, 0.B, 0.B, 0.B, 0.B, X, cmpType, X, 0.B, 0.B, X, X, 0.B)
       switch (funct3)
         .is ("b000".U) { setBranch(CmpType.Eq ) }  // BEQ
         .is ("b001".U) { setBranch(CmpType.Ne ) }  // BNE
