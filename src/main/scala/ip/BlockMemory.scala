@@ -1,5 +1,6 @@
 package ip
 
+import util.GenerateOptions
 import chisel3._
 
 private class RawBlockMemory(addrWidth: Int, dataWidth: Int) extends BlackBox {
@@ -44,26 +45,12 @@ class MemoryPort(addrWidth: Int, dataWidth: Int) extends Bundle {
   }
 }
 
-class BlockMemory(bytes: BigInt, dataWidth: Int)(implicit debugMode: Boolean = false) extends Module {
+class BlockMemory(bytes: BigInt, dataWidth: Int)(implicit options: GenerateOptions) extends Module {
   val addrWidth = LazyList.from(1).filter((x) => (1 << x) >= bytes).head;
   val io1 = IO(new MemoryPort(addrWidth, dataWidth))
   val io2 = IO(new MemoryPort(addrWidth, dataWidth))
 
-  if (debugMode) {
-    val mem = SyncReadMem(1 << addrWidth, UInt(dataWidth.W))
-    chisel3.util.experimental.loadMemoryFromFileInline(mem, "main.txt")
-
-    def generate_for(io: MemoryPort) = {
-      io.dataOut := mem.read(io.addr)
-      when (io.write) {
-        mem.write(io.addr, io.dataIn)
-      }
-    }
-
-    generate_for(io1)
-    generate_for(io2)
-  }
-  else {
+  if (options.useIP) {
     val raw = Module(new RawBlockMemory(addrWidth, dataWidth))
     raw.io.clka := clock
     raw.io.addra := io1.addr
@@ -76,5 +63,19 @@ class BlockMemory(bytes: BigInt, dataWidth: Int)(implicit debugMode: Boolean = f
     raw.io.dinb := io2.dataIn
     io2.dataOut := raw.io.doutb
     raw.io.web := io2.write
+  }
+  else {
+    val mem = SyncReadMem(1 << addrWidth, UInt(dataWidth.W))
+    chisel3.util.experimental.loadMemoryFromFileInline(mem, "main.txt")
+
+    def generate_for(io: MemoryPort) = {
+      io.dataOut := mem.read(io.addr)
+      when (io.write) {
+        mem.write(io.addr, io.dataIn)
+      }
+    }
+
+    generate_for(io1)
+    generate_for(io2)
   }
 }

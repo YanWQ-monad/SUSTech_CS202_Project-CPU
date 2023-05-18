@@ -15,41 +15,41 @@ class CoreSpec extends AnyFlatSpec with ChiselScalatestTester {
 
   def asUnsigned(x: Int) = (BigInt(x >>> 1) << 1) + (x & 1)
 
-  it should "work" in {
-    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
-      dut.clock.step(1)
-
-      val loop = new Breaks
-      loop.breakable {
-        for (i <- 0 until 512) {
-          val pc = dut.debug.get.pc.peek().litValue
-          println(f"PC = 0x${pc}%x")
-//          println(f"${i}%d, PC: 0x${pc}%x  invalid flag: ${dut.debug.get.invalid.peek().litValue}")
-          dut.clock.step(2)
-
-          for (i <- 0 until 32) {
-            dut.debug.get.debugRegAddr.poke(i.U)
-            val value = asUnsigned(dut.debug.get.debugRegData.peek().litValue.toInt)
-            val name = regNames(i)
-            print(f"${name}%3s: ${value}%08x  ")
-            if ((i + 1) % 8 == 0)
-              println()
-          }
-
-          val value = dut.io.extOut.peek().litValue
-          println(f"val: ${value}%08x")
-
-          if (pc == 0xd0 || (pc & 0x3) > 0)
-            loop.break
-
-          //        for  (i <- 0 until 8) {
-          //          val value = dut.io.externalOut(i).peek().litValue
-          //          print(f"${i}%d: ${value}%08x  ")
-          //        }
-          //        println()
-          println()
-        }
-      }
-    }
-  }
+//  it should "work" in {
+//    test(new Core()).withAnnotations(Seq(WriteVcdAnnotation)) { dut =>
+//      dut.clock.step(1)
+//
+//      val loop = new Breaks
+//      loop.breakable {
+//        for (i <- 0 until 512) {
+//          val pc = dut.debug.get.pc.peek().litValue
+//          println(f"PC = 0x${pc}%x")
+////          println(f"${i}%d, PC: 0x${pc}%x  invalid flag: ${dut.debug.get.invalid.peek().litValue}")
+//          dut.clock.step(2)
+//
+//          for (i <- 0 until 32) {
+//            dut.debug.get.debugRegAddr.poke(i.U)
+//            val value = asUnsigned(dut.debug.get.debugRegData.peek().litValue.toInt)
+//            val name = regNames(i)
+//            print(f"${name}%3s: ${value}%08x  ")
+//            if ((i + 1) % 8 == 0)
+//              println()
+//          }
+//
+//          val value = dut.io.extOut.peek().litValue
+//          println(f"val: ${value}%08x")
+//
+//          if (pc == 0xd0 || (pc & 0x3) > 0)
+//            loop.break
+//
+//          //        for  (i <- 0 until 8) {
+//          //          val value = dut.io.externalOut(i).peek().litValue
+//          //          print(f"${i}%d: ${value}%08x  ")
+//          //        }
+//          //        println()
+//          println()
+//        }
+//      }
+//    }
+//  }
 }

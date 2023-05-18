@@ -1,5 +1,6 @@
 package core
 
+import util.GenerateOptions
 import chisel3._
 import chiseltest._
 import org.scalatest.flatspec.AnyFlatSpec
@@ -27,7 +28,13 @@ class MemorySpec extends AnyFlatSpec with ChiselScalatestTester {
   }
 
   def getMemory: Memory = {
-    implicit val debugMode = true
+    implicit val options = new GenerateOptions(
+      true,
+      false,
+      100_000_000,
+      10_000_000,
+      8_500_000,
+      40_000_000)
     new Memory(32)
   }
 
