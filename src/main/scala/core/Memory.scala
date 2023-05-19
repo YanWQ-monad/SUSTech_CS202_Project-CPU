@@ -2,6 +2,7 @@ package core
 
 import util.{switch, _}
 import board._
+import board.display.ConsoleCharBundle
 import ip._
 import chisel3._
 import chisel3.util._
@@ -75,6 +76,16 @@ class Memory(bytes: BigInt)(implicit options: GenerateOptions) extends Module {
 }
 
 class MemoryDispatch(bytes: BigInt)(implicit options: GenerateOptions) extends Module {
+  def vgaDataRW(port: MemoryPort, addr: UInt, write: Bool, getter: (ConsoleCharBundle) => UInt, updater: (ConsoleCharBundle) => Unit): UInt = {
+    val rawData = port.setRead(addr)
+
+    val data = ConsoleCharBundle.unpack(rawData)
+    updater(data)
+    port.setWrite(addr, data.pack, write)
+
+    getter(ConsoleCharBundle.unpack(rawData))
+  }
+
   val io = IO(new Bundle {
     val addr = Input(UInt(32.W))
     val write = Input(Bool())
@@ -90,52 +101,81 @@ class MemoryDispatch(bytes: BigInt)(implicit options: GenerateOptions) extends M
     val external = Flipped(new BoardDataBundle())
   })
 
-  val mem = Module(new BlockMemory(bytes, 32))
+  val mem = Module(new BlockMemory(0, bytes, 32, Some("main.txt")))
   mem.io1.init()
   mem.io2.init()
+  mem.io.clockB := clock
 
   io.dataPC := mem.io1.setRead((io.addrPC >> 2).asUInt)
   io.dataOut := DontCare
 
-  val uartData = RegInit(0.U(32.W))
+  val dequeueData = RegInit(0.U(32.W))
   val externalReg = RegInit(0.U.asTypeOf(new BoardDataRegableBundle))
+  val shouldReadDequeue = io.enable && !io.willWrite && !io.step
 
   io.external.regable := externalReg
   io.external.uartOut.noenq()
   io.external.uartIn.nodeq()
+  io.external.keyboard.nodeq()
+  io.external.vgaDataPort.init()
 
   io.dataOut := 0.U
   switch (io.addr)
-    .is (0xFFFFF000L.U) {
+    .is (0xFFFFF000L.U) {  // read UART
+      when(shouldReadDequeue && io.external.uartIn.valid) {
+        dequeueData := io.external.uartIn.deq()
+      }
+      io.dataOut := dequeueData
+    }
+    .is (0xFFFFF004L.U) {  // write UART
       when(io.enable && io.write && io.external.uartOut.ready) {
         io.external.uartOut.enq(io.dataIn(7, 0))
       }
-      when(io.enable && !io.willWrite && !io.step && io.external.uartIn.valid) {
-        uartData := io.external.uartIn.deq()
-      }
-      io.dataOut := uartData
     }
-    .is (0xFFFFF004L.U) { io.dataOut := io.external.uartIn.valid }
-    .is (0xFFFFF008L.U) { io.dataOut := io.external.uartOut.ready }
+    .is (0xFFFFF008L.U) { io.dataOut := io.external.uartIn.valid }
+    .is (0xFFFFF00CL.U) { io.dataOut := io.external.uartOut.ready }
     .is (0xFFFFF010L.U) { io.dataOut := io.external.cycles }
-    .is (0xFFFFF020L.U) { externalReg.tubes.mode := TubesMode(io.dataIn(TubesMode.getWidth - 1, 0)) }
-    .is (0xFFFFF024L.U) { externalReg.tubes.effect := TubesEffect(io.dataIn(TubesEffect.getWidth - 1, 0)) }
-    .is (0xFFFFF028L.U) { externalReg.tubes.value := io.dataIn }
-    .is (0xFFFFF02CL.U) { externalReg.tubes.enables := io.dataIn(7, 0).asBools }
+    .is (0xFFFFF014L.U) {
+      when(shouldReadDequeue && io.external.keyboard.valid) {
+        dequeueData := io.external.keyboard.deq().asUInt
+      }
+      io.dataOut := dequeueData
+    }
+    .is (0xFFFFF018L.U) { io.dataOut := io.external.keyboard.valid }
+    .is (0xFFFFF01CL.U) { io.dataOut := io.external.buttons.center }
+    .is (0xFFFFF020L.U) { io.dataOut := io.external.buttons.up }
+    .is (0xFFFFF024L.U) { io.dataOut := io.external.buttons.down }
+    .is (0xFFFFF028L.U) { io.dataOut := io.external.buttons.left }
+    .is (0xFFFFF02CL.U) { io.dataOut := io.external.buttons.right }
+    .is (0xFFFFF030L.U) { externalReg.tubes.mode := TubesMode(io.dataIn(TubesMode.getWidth - 1, 0)) }
+    .is (0xFFFFF034L.U) { externalReg.tubes.effect := TubesEffect(io.dataIn(TubesEffect.getWidth - 1, 0)) }
+    .is (0xFFFFF038L.U) { externalReg.tubes.value := io.dataIn }
+    .is (0xFFFFF03CL.U) { externalReg.tubes.enables := io.dataIn(7, 0).asBools }
     .default {
-      // .is(0xFFFFFF1.U) {
-      //   when(io.addr(7)) { // write
-      //     val data = externalOutReg(io.addr(5, 2))
-      //     io.dataOut := data
-      //     data := io.dataIn
-      //   }.otherwise {
-      //     io.dataOut := io.externalIn(io.addr(5, 2))
-      //   }
-      // }
-      val addr = (io.addr >> 2).asUInt
-      when(io.enable) {
-        io.dataOut := mem.io2.setRead(addr)
-        mem.io2.setWrite(addr, io.dataIn, io.write)
+      when(io.addr(31, 16) === "b1111111111111101".U) {  // screen chars data
+        val addr = io.addr(15, 2)
+        vgaDataRW(io.external.vgaDataPort, addr, io.write,
+          bundle => bundle.char, bundle => bundle.char := io.dataIn(7, 0))
+      } .elsewhen(io.addr(31, 16) === "b1111111111111110".U) {  // screen color data
+        val addr = io.addr(15, 2)
+        vgaDataRW(io.external.vgaDataPort, addr, io.write,
+          bundle => bundle.color, bundle => bundle.color := io.dataIn(2, 0))
+      } .elsewhen(io.addr(31, 8) === 0xFFFFF1.U) {  // switches
+        val index = io.addr(7, 2)
+        when(index < 24.U) {
+          io.dataOut := io.external.switches(index)
+        }
+      } .elsewhen(io.addr(31, 8) === 0xFFFFF2.U) {  // LEDs
+        val index = io.addr(7, 2)
+        when(index < 24.U) {
+          externalReg.leds(index) := io.dataIn(0)
+        }
+      } .otherwise {
+        val addr = (io.addr >> 2).asUInt
+        when(io.enable) {
+          io.dataOut := mem.io2.setRead(addr)
+          mem.io2.setWrite(addr, io.dataIn, io.write)
+        }
       }
     }
 }

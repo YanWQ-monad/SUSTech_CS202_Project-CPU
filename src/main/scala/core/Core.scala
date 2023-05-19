@@ -47,6 +47,7 @@ class Core(implicit options: GenerateOptions) extends Module {
     io <> board.outer
     board.io.cycles := cycles
     board.io.uartClock := clocks.io.clockUart
+    board.io.vgaClock := clocks.io.clockVga
 
     val exeResult = Wire(SInt(32.W))
     mem.io.addrPC := pc
@@ -63,16 +64,11 @@ class Core(implicit options: GenerateOptions) extends Module {
     reg.io.rs2Addr := id.io.rs2
     reg.io.rdAddr := id.io.rd
     reg.io.write := id.io.regWrite && step
-    when(id.io.memLoad) {
-      reg.io.rdDataIn := mem.io.dataOut
-    }
-      .otherwise {
-        reg.io.rdDataIn := exeResult
-      }
+    reg.io.rdDataIn := Mux(id.io.memLoad, mem.io.dataOut, exeResult)
 
     cmp.io.cmpType := id.io.cmpType
     cmp.io.lhs := reg.io.rs1Out
-    cmp.io.rhs := reg.io.rs2Out
+    cmp.io.rhs := Mux(id.io.useImm, id.io.imm, reg.io.rs2Out)
     alu.io.aluType := id.io.aluType
     alu.io.lhs := Mux(id.io.pcLink, pcOld.asSInt, reg.io.rs1Out)
     alu.io.rhs := Mux(id.io.useImm, id.io.imm, reg.io.rs2Out)
@@ -118,7 +114,7 @@ class PCLogic extends Module {
 object VerilogMain extends App {
   implicit val options = new GenerateOptions(
     false,
-    true,
+    false,
     100_000_000,
     20_000_000,
     12_500_000,

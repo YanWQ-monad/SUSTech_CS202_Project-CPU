@@ -16,7 +16,7 @@ class UART(dataBits: Int, oversampleLog: Int) extends Module {
     val dataOut = Decoupled(UInt(dataBits.W))
   })
 
-  val tx = Module(new UARTTransmitter(dataBits, oversampleLog))
+  val tx = Module(new UARTTransmitter(dataBits))
   val rx = Module(new UARTReceiver(dataBits, oversampleLog))
 
   rx.rx := io.pair.rx
@@ -30,7 +30,7 @@ class UART(dataBits: Int, oversampleLog: Int) extends Module {
   tx.tick := clkCnt.andR
 }
 
-class UARTTransmitter(dataBits: Int, oversampleLog: Int) extends Module {
+class UARTTransmitter(dataBits: Int) extends Module {
   val io = IO(Flipped(Decoupled(UInt(dataBits.W))))
   val tx = IO(Output(Bool()))
   val tick = IO(Input(Bool()))

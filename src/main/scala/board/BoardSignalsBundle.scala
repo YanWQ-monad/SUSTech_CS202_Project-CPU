@@ -1,12 +1,23 @@
 package board
 
+import board.display._
 import misc._
 import util.GenerateOptions
 import chisel3._
 import chisel3.util._
+import ip._
 
 class BoardDataRegableBundle extends Bundle {
   val tubes = new TubesInputBundle()
+  val leds = Vec(24, Bool())
+}
+
+class ButtonGroupBundle extends Bundle {
+  val up = Input(Bool())
+  val down = Input(Bool())
+  val left = Input(Bool())
+  val right = Input(Bool())
+  val center = Input(Bool())
 }
 
 class BoardDataBundle extends Bundle {
@@ -14,11 +25,20 @@ class BoardDataBundle extends Bundle {
   val uartIn = Decoupled(UInt(8.W))
   val cycles = Output(UInt(32.W))
   val regable = Input(new BoardDataRegableBundle())
+  val switches = Output(Vec(24, Bool()))
+  val buttons = Flipped(new ButtonGroupBundle())
+  val keyboard = Decoupled(KeyboardButton())
+  val vgaDataPort = new MemoryPort(14, 11) // todo: ?
 }
 
 class RealBoardDataBundle extends Bundle {
   val uart = new UARTPair()
   val tubes = new TubesGroupBundle()
+  val vga = new VGAOutBundle()
+  val switches = Input(Vec(24, Bool()))
+  val buttons = new ButtonGroupBundle()
+  val keyboard = new KeyboardInBundle()
+  val leds = Output(Vec(24, Bool()))
 }
 
 class BoardDataController(implicit options: GenerateOptions) extends Module {
@@ -26,10 +46,14 @@ class BoardDataController(implicit options: GenerateOptions) extends Module {
   val inside = IO(new BoardDataBundle())
   val io = IO(new Bundle {
     val uartClock = Input(Clock())
+    val vgaClock = Input(Clock())
     val cycles = Input(UInt(32.W))
   })
 
   inside.cycles := io.cycles
+  inside.switches <> outer.switches.map(Debounce(_).out)
+  inside.buttons.elements.foreach(pair => pair._2 := Debounce(outer.buttons.elements(pair._1).asUInt.asBool).out)
+  inside.regable.leds <> outer.leds
 
   val uart = Module(new UARTWrap(8, 4))
   uart.io.pair <> outer.uart
@@ -40,6 +64,54 @@ class BoardDataController(implicit options: GenerateOptions) extends Module {
   val tube = Module(new TubesController())
   tube.io.out <> outer.tubes
   tube.io.in <> inside.regable.tubes
+
+  val keyboard = Module(new Keyboard())
+  val keyboardQueue = Module(new CrossClockQueue(KeyboardButton(), 32))
+  keyboard.io.in.rows <> outer.keyboard.rows.map(Debounce(_).out)
+  keyboard.io.in.cols <> outer.keyboard.cols.map(Debounce(_).out)
+  keyboardQueue.io.clkEnq := clock
+  keyboardQueue.io.clkDeq := clock
+  keyboardQueue.io.enq <> keyboard.io.out
+  keyboardQueue.io.deq <> inside.keyboard
+
+  val display = Module(new DisplaySubsystem())
+  display.io.vgaClock := io.vgaClock
+  display.io.out <> outer.vga
+  display.io.vgaDataPort <> inside.vgaDataPort
+}
+
+class DisplaySubsystem(implicit options: GenerateOptions) extends Module {
+  val vgaParams = VGAParams(
+    new OneTiming(800, 40, 128, 88),  // horizontal
+    new OneTiming(600, 1, 4, 23),  // vertical
+    11)
+
+  val io = IO(new Bundle {
+    val vgaClock = Input(Clock())
+    val out = new VGAOutBundle()
+    val vgaDataPort = new MemoryPort(14, 11)
+  })
+
+  val vga = withClock(io.vgaClock) { Module(new VGATop(vgaParams)) }
+  val console = withClock(io.vgaClock) { Module(new Console(vgaParams)) }
+  val dataMem = Module(new BlockMemory(1, 256 * 64, ConsoleCharBundle.packedWidth))
+  val fontRom = Module(new BlockMemory(2, 0x100 * 16, 8, Some("font.txt")))
+  dataMem.io.clockB := io.vgaClock
+  fontRom.io.clockB := io.vgaClock
+  dataMem.io2.init()
+  fontRom.io1.init()
+  fontRom.io2.init()
+
+  require(dataMem.addrWidth == io.vgaDataPort.addrWidth)
+  require(dataMem.dataWidth == io.vgaDataPort.dataWidth)
+
+  vga.io.out <> io.out
+
+  console.io.charRamData := dataMem.io2.setRead(console.io.charRamAddr)
+  console.io.fontRomData := fontRom.io2.setRead(console.io.fontRomAddr)
+  console.io.out <> vga.io.in
+  console.io.info <> vga.io.info
+  io.vgaDataPort <> dataMem.io1
 }
 
 class UARTWrap(dataBits: Int, oversampleLog: Int) extends Module {
@@ -52,10 +124,12 @@ class UARTWrap(dataBits: Int, oversampleLog: Int) extends Module {
     val uartClock = Input(Clock())
   })
 
-  val txQueue = Module(new CrossClockQueue(UInt(dataBits.W), 128))  // CPU  --> UART
-  val rxQueue = Module(new CrossClockQueue(UInt(dataBits.W), 128))  // UART --> CPU
+  val txQueue = Module(new CrossClockQueue(UInt(dataBits.W), 128)) // CPU  --> UART
+  val rxQueue = Module(new CrossClockQueue(UInt(dataBits.W), 128)) // UART --> CPU
 
-  val uart = withClock(io.uartClock) { Module(new UART(dataBits, oversampleLog)) }
+  val uart = withClock(io.uartClock) {
+    Module(new UART(dataBits, oversampleLog))
+  }
 
   uart.io.pair <> io.pair
 
