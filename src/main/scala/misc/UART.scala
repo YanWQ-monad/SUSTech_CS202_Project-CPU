@@ -2,31 +2,36 @@ package misc
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.experimental.decode.TruthTable
 
-class UART(dataBits: Int) extends Module {
+class UARTPair extends Bundle {
+  val tx = Output(Bool())
+  val rx = Input(Bool())
+}
+
+class UART(dataBits: Int, oversampleLog: Int) extends Module {
   val io = IO(new Bundle {
-    val tx = Output(Bool())
-    val rx = Input(Bool())
+    val pair = new UARTPair()
 
     val dataIn = Flipped(Decoupled(UInt(dataBits.W)))
     val dataOut = Decoupled(UInt(dataBits.W))
   })
 
-  val tx = Module(new UARTTransmitter(dataBits))
-  val rx = Module(new UARTReceiver(dataBits))
+  val tx = Module(new UARTTransmitter(dataBits, oversampleLog))
+  val rx = Module(new UARTReceiver(dataBits, oversampleLog))
 
-  rx.rx := io.rx
+  rx.rx := io.pair.rx
   rx.io <> io.dataOut
   rx.io.ready := DontCare
   tx.io <> io.dataIn
-  io.tx := tx.tx
+  io.pair.tx := tx.tx
 
-  val clkCnt = RegInit(0.U(3.W))
+  val clkCnt = RegInit(0.U(oversampleLog.W))
   clkCnt := clkCnt + 1.U
   tx.tick := clkCnt.andR
 }
 
-class UARTTransmitter(dataBits: Int) extends Module {
+class UARTTransmitter(dataBits: Int, oversampleLog: Int) extends Module {
   val io = IO(Flipped(Decoupled(UInt(dataBits.W))))
   val tx = IO(Output(Bool()))
   val tick = IO(Input(Bool()))
@@ -49,38 +54,45 @@ class UARTTransmitter(dataBits: Int) extends Module {
   io.ready := tick && state === UARTState.Start
 }
 
-// 8 times oversample
-class UARTReceiver(dataBits: Int) extends Module {
+// 16 times oversample
+class UARTReceiver(dataBits: Int, oversampleLog: Int) extends Module {
   val io = IO(Decoupled(UInt(dataBits.W)))
   val rx = IO(Input(Bool()))
 
+  val initialCnt = (1 << oversampleLog) - 2
+  val cnt = RegInit(initialCnt.U((oversampleLog - 1).W))
+
   val sync = ShiftRegister(rx, 2)
-  val cnt = RegInit(2.U(2.W))
   val bit = RegInit(true.B)
 
-  when (sync && cnt =/= "b11".U) {
+  when (sync && !cnt.andR) {
     cnt := cnt + 1.U
-  } .elsewhen (!sync && cnt =/= "b00".U) {
+  } .elsewhen (!sync && cnt =/= 0.U) {
     cnt := cnt - 1.U
   }
 
   when (cnt.andR) { bit := 1.U }
-    .elsewhen (!cnt.orR) { bit := 0.U }
+    .elsewhen (cnt === 0.U) { bit := 0.U }
 
-  val clkCnt = RegInit(0.U(3.W))
-  clkCnt := clkCnt + 1.U
-  val tick = clkCnt.andR
+  val spacing = RegInit(0.U(oversampleLog.W))
+  val tick = spacing === ((1 << oversampleLog) - oversampleLog * 3 / 2).U
 
   val state = RegInit(UARTState.Idle)
-  val idleNext = Mux(!bit, UARTState.Start, UARTState.Idle)
-  val nextState = Mux(tick, MuxLookup(state, idleNext)(UARTState.nextTable()), state)
-  state := nextState
+  val isIdle = state === UARTState.Idle
+
+  when (isIdle) {
+    state := Mux(!bit, UARTState.Start, UARTState.Idle)
+  } .otherwise {
+    state := Mux(spacing.andR, MuxLookup(state, UARTState.Idle)(UARTState.nextTable()), state)
+  }
+
+  spacing := Mux(isIdle, 0.U, spacing + 1.U)
 
   val data = ShiftRegisters(bit, 8, tick)
   io.bits := Cat(data).asUInt
 
   io.valid := false.B
-  when (state === UARTState.Bit7 && tick) {
+  when (state === UARTState.Stop1 && tick) {
     io.valid := true.B
   }
 }

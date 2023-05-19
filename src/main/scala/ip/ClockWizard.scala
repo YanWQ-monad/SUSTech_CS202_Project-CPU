@@ -30,8 +30,8 @@ class ClockWizard(implicit options: GenerateOptions) extends Module {
     // todo: can't init "cnt"
     withReset (0.B.asAsyncReset) {  // disable reset to clock
       withClock(raw.io.clk_uart) {
-        val cnt = RegInit(0.U(11.W)) // 8x
-        cnt := cnt + 111.U
+        val cnt = RegInit(0.U(11.W))
+        cnt := cnt + 151.U
         io.clockUart := cnt(10).asClock
       }
     }

@@ -27,7 +27,7 @@ class Core(implicit options: GenerateOptions) extends Module {
     val reg = Module(new RegisterFile())
     val mem = Module(new Memory(32768))
 
-    val uart = Module(new UARTWrap(8))
+    val board = Module(new BoardDataController())
 
     // Core (Sequential) logic
     val cycles = RegInit(0.U(32.W))
@@ -44,10 +44,10 @@ class Core(implicit options: GenerateOptions) extends Module {
     step := !step
 
     // Core (combination) logic
-    mem.io.externalIn := DontCare
-    mem.io.externalIn(0) := cycles
-    //  mem.io.externalIn(1) := io.extIn.asUInt
-    //  io.extOut := mem.io.externalOut(0)
+    board.inside <> mem.io.external
+    io <> board.outer
+    board.io.cycles := cycles
+    board.io.uartClock := clocks.io.clockUart
 
     val exeResult = Wire(SInt(32.W))
     mem.io.addrPC := pc
@@ -88,12 +88,6 @@ class Core(implicit options: GenerateOptions) extends Module {
     mem.io.dataIn := reg.io.rs2Out
     mem.io.unsigned := id.io.memUnsigned
     mem.io.step := step
-    uart.io.dataIn <> mem.io.uartOut
-    uart.io.dataOut <> mem.io.uartIn
-
-    uart.io.rx := io.uartRx
-    io.uartTx := uart.io.tx
-    uart.io.uartClock := clocks.io.clockUart
 
     // Debug ports
     debug.foreach { debug =>
@@ -103,36 +97,6 @@ class Core(implicit options: GenerateOptions) extends Module {
       debug.invalid := id.io.invalid
     }
   }
-}
-
-class UARTWrap(dataBits: Int) extends Module {
-  val io = IO(new Bundle {
-    val tx = Output(Bool())
-    val rx = Input(Bool())
-
-    val dataIn = Flipped(Decoupled(UInt(dataBits.W)))
-    val dataOut = Decoupled(UInt(dataBits.W))
-
-    val uartClock = Input(Clock())
-  })
-
-  val txQueue = Module(new CrossClockQueue(UInt(dataBits.W), 64))  // CPU  --> UART
-  val rxQueue = Module(new CrossClockQueue(UInt(dataBits.W), 64))  // UART --> CPU
-
-  val uart = withClock(io.uartClock) { Module(new UART(dataBits)) }
-
-  uart.io.rx := io.rx
-  io.tx := uart.io.tx
-
-  txQueue.io.clkEnq := clock
-  txQueue.io.clkDeq := io.uartClock
-  txQueue.io.enq <> io.dataIn
-  txQueue.io.deq <> uart.io.dataIn
-
-  rxQueue.io.clkEnq := io.uartClock
-  rxQueue.io.clkDeq := clock
-  rxQueue.io.enq <> uart.io.dataOut
-  rxQueue.io.deq <> io.dataOut
 }
 
 class PCLogic extends Module {
@@ -157,8 +121,8 @@ object VerilogMain extends App {
     false,
     true,
     100_000_000,
-    10_000_000,
-    8_500_000,
+    20_000_000,
+    12_500_000,
     40_000_000)
 
   Emit(new Core(), args)
