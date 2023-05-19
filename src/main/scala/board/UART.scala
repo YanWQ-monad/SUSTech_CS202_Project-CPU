@@ -1,8 +1,7 @@
-package misc
+package board
 
 import chisel3._
 import chisel3.util._
-import chisel3.util.experimental.decode.TruthTable
 
 class UARTPair extends Bundle {
   val tx = Output(Bool())
@@ -59,7 +58,7 @@ class UARTReceiver(dataBits: Int, oversampleLog: Int) extends Module {
   val io = IO(Decoupled(UInt(dataBits.W)))
   val rx = IO(Input(Bool()))
 
-  val initialCnt = (1 << oversampleLog) - 2
+  val initialCnt = (1 << (oversampleLog - 1)) - 2
   val cnt = RegInit(initialCnt.U((oversampleLog - 1).W))
 
   val sync = ShiftRegister(rx, 2)

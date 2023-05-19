@@ -1,6 +1,6 @@
 package core
 
-import util.{Emit, switch}
+import util._
 import chisel3._
 
 class Comparator extends Module {

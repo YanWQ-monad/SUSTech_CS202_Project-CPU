@@ -1,7 +1,7 @@
 package core
 
 import util.{switch, _}
-import misc._
+import board._
 import ip._
 import chisel3._
 import chisel3.util._

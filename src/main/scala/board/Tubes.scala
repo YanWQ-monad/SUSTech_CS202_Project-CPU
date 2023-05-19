@@ -1,4 +1,4 @@
-package misc;
+package board
 
 import util.{GenerateOptions, Helper, Split, switch}
 import chisel3._

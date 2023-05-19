@@ -1,6 +1,6 @@
 package misc
 
-import util.{Emit, Helper}
+import util.Helper
 import chisel3._
 import chisel3.util._
 

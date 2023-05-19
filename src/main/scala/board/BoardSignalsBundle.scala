@@ -1,5 +1,6 @@
-package misc
+package board
 
+import misc._
 import util.GenerateOptions
 import chisel3._
 import chisel3.util._

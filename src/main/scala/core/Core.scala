@@ -1,10 +1,9 @@
 package core
 
 import util._
-import misc._
+import board._
 import ip._
 import chisel3._
-import chisel3.util._
 
 class Core(implicit options: GenerateOptions) extends Module {
   val io = IO(new RealBoardDataBundle())

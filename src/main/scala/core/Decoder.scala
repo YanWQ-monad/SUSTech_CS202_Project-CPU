@@ -1,6 +1,5 @@
 package core
 
-import circt.stage.ChiselStage
 import util.{switch, _}
 import chisel3._
 import chisel3.util._
