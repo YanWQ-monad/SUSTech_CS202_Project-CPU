@@ -2,21 +2,22 @@ package board.display
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental._
+import chisel3.experimental.requireIsChiselType
 
 private object Top {
-  val ColorPaletteScheme = DraculaPalette
+  val ColorPaletteScheme = DraculaPaletteModified
 }
 
 class ConsoleCharBundle extends Bundle {
-  val color = UInt(3.W)
+  val color = UInt(4.W)
+  val colorBg = UInt(4.W)
   val char = UInt(8.W)
 
   def pack: UInt = asUInt
 }
 
 object ConsoleCharBundle {
-  def packedWidth: Int = 3 + 8
+  def packedWidth: Int = 4 + 4 + 8
 //  def asBundle(color: UInt, char: UInt): ConsoleCharBundle = {
 //    val bundle = Wire(new ConsoleCharBundle)
 //    bundle.color := color
@@ -57,24 +58,25 @@ class Console(params: VGAParams) extends Module {
     val out = Output(new RGB4BitBundle())
   })
 
-  val palette = Module(new ColorPalette())
-  val background = Top.ColorPaletteScheme.Background.asChiselBundle
+  val paletteFg = Module(new ColorPalette())
+  val paletteBg = Module(new ColorPalette())
 
   val x = io.info.x + DELAY.S
 
-  // 1 cycle delay
+  // 1 cycle delay: read character from buffer (RAM)
   val charX = wireOf(UInt(8.W), (x >> 3).asUInt)
   val charY = wireOf(UInt(6.W), (io.info.y >> 4).asUInt)
-  io.charRamAddr := Cat(charY, charX)
+  io.charRamAddr := Cat(charY, charX)  // get the char should display in (x, y)
   val charData = ConsoleCharBundle.unpack(io.charRamData)
-  palette.io.idx := charData.color
+  paletteFg.io.idx := charData.color
+  paletteBg.io.idx := charData.colorBg
 
-  // 1 cycle delay
+  // 1 cycle delay: read font data from ROM
   val charLine = io.info.y(3, 0)
   io.fontRomAddr := Cat(charData.char, charLine)
 
   val pixelEnable = io.fontRomData(io.info.x(2, 0))
-  io.out :<= Mux(pixelEnable, palette.io.out, background)
+  io.out :<= Mux(pixelEnable, paletteFg.io.out, paletteBg.io.out)
 }
 
 object ConsoleCharState extends ChiselEnum {
@@ -83,19 +85,27 @@ object ConsoleCharState extends ChiselEnum {
 
 class ColorPalette extends Module {
   val io = IO(new Bundle {
-    val idx = Input(UInt(3.W))
+    val idx = Input(UInt(4.W))
     val out = Output(new RGB4BitBundle())
   })
 
   val table = Seq(
-    0 -> Top.ColorPaletteScheme.Foreground,
-    1 -> Top.ColorPaletteScheme.Cyan,
-    2 -> Top.ColorPaletteScheme.Green,
-    3 -> Top.ColorPaletteScheme.Orange,
-    4 -> Top.ColorPaletteScheme.Pink,
-    5 -> Top.ColorPaletteScheme.Purple,
-    6 -> Top.ColorPaletteScheme.Red,
-    7 -> Top.ColorPaletteScheme.Yellow,
+    0x0 -> Top.ColorPaletteScheme.Black,
+    0x1 -> Top.ColorPaletteScheme.Red,
+    0x2 -> Top.ColorPaletteScheme.Green,
+    0x3 -> Top.ColorPaletteScheme.Yellow,
+    0x4 -> Top.ColorPaletteScheme.Blue,
+    0x5 -> Top.ColorPaletteScheme.Magenta,
+    0x6 -> Top.ColorPaletteScheme.Cyan,
+    0x7 -> Top.ColorPaletteScheme.White,
+    0x8 -> Top.ColorPaletteScheme.BrightBlack,
+    0x9 -> Top.ColorPaletteScheme.BrightRed,
+    0xA -> Top.ColorPaletteScheme.BrightGreen,
+    0xB -> Top.ColorPaletteScheme.BrightYellow,
+    0xC -> Top.ColorPaletteScheme.BrightBlue,
+    0xD -> Top.ColorPaletteScheme.BrightMagenta,
+    0xE -> Top.ColorPaletteScheme.BrightCyan,
+    0xF -> Top.ColorPaletteScheme.BrightWhite,
   ).map(o => o._1.U(io.idx.getWidth.W) -> o._2.asChiselBundle)
 
   io.out := MuxLookup(io.idx, table.head._2)(table)

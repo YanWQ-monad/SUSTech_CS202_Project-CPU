@@ -8,6 +8,12 @@ object Counter {
     x := x + 1.U
     x
   }
+
+  def maxBits(bits: Int, en: Bool): UInt = {
+    val x = RegInit(0.U(bits.W))
+    x := Mux(en, x + 1.U, x)
+    x
+  }
 }
 
 object Pulse {

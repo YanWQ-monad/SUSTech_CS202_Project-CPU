@@ -63,6 +63,11 @@ class VGATiming(params: VGAParams) extends Module {
 
   val x = RegInit(CoordinateType, params.horizontal.lineStart.S)
   val y = RegInit(CoordinateType, params.vertical.lineStart.S)
+  val trueY = RegInit(CoordinateType, params.vertical.lineStart.S)  // use trueY, so vsync will appear correctly
+
+  when(x === -1.S) {  // only when x is going to be 0, update trueY
+    trueY := y
+  }
 
   when(x === (params.horizontal.lineEnd - 1).S) {
     val frameEnd = y === (params.vertical.lineEnd - 1).S
@@ -73,7 +78,7 @@ class VGATiming(params: VGAParams) extends Module {
   }
 
   io.hsync := RegNext(!(x >= params.horizontal.syncStart.S && x < params.horizontal.syncEnd.S))
-  io.vsync := RegNext(!(y >= params.vertical.syncStart.S && y < params.vertical.syncEnd.S))
+  io.vsync := RegNext(!(trueY >= params.vertical.syncStart.S && trueY < params.vertical.syncEnd.S))
   io.dataEnable := RegNext(x >= params.horizontal.activeStart.S && y >= params.vertical.activeStart.S)
   io.info.frameSignal := RegNext(x === params.horizontal.lineStart.S && y === params.vertical.lineStart.S)
   io.info.lineSignal := RegNext(x === params.horizontal.lineStart.S)

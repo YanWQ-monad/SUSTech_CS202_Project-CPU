@@ -4,6 +4,7 @@ import util.Helper
 import chisel3._
 import chisel3.util._
 
+// a queue for transfer data between clock, with buffer (avoid data loss between different clocks)
 class CrossClockQueue[T <: Data](gen: T, depth: Int) extends Module {
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(gen))

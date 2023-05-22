@@ -11,7 +11,7 @@ class DebounceOutBundle extends Bundle {
 }
 
 class Debounce(implicit options: GenerateOptions) extends Module {
-  private val REQUIRED_INTERVAL = 10  // ms
+  private val REQUIRED_INTERVAL = 5  // ms
   private val REQUIRED_CYCLES = options.systemClock * REQUIRED_INTERVAL / 1000
   private val REQUIRED_BITS = Helper.log2(REQUIRED_CYCLES)
 
@@ -23,8 +23,11 @@ class Debounce(implicit options: GenerateOptions) extends Module {
   val sync = ShiftRegister(io.in, 2)
 
   val out = RegInit(0.B)
-  val idle = out === io.in
+  val idle = out === sync
 
+  // idea: only take the input when it's stable (unchanged) in `REQUIRED_INTERVAL` time.
+  // when the input is different from output, increasing the counter
+  // when the counter is full, flipped the output
   val cnt = RegInit(0.U(REQUIRED_BITS.W))
   val onMax = cnt.andR
   cnt := Mux(idle, 0.U, cnt + 1.U)

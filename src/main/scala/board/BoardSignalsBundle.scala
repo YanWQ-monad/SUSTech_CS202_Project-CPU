@@ -28,7 +28,8 @@ class BoardDataBundle extends Bundle {
   val switches = Output(Vec(24, Bool()))
   val buttons = Flipped(new ButtonGroupBundle())
   val keyboard = Decoupled(KeyboardButton())
-  val vgaDataPort = new MemoryPort(14, 11) // todo: ?
+  val vgaDataPort = new MemoryPort(14, 16)
+  val originPC = Output(UInt(32.W))
 }
 
 class RealBoardDataBundle extends Bundle {
@@ -39,6 +40,7 @@ class RealBoardDataBundle extends Bundle {
   val buttons = new ButtonGroupBundle()
   val keyboard = new KeyboardInBundle()
   val leds = Output(Vec(24, Bool()))
+  val interrupt = Input(Bool())
 }
 
 class BoardDataController(implicit options: GenerateOptions) extends Module {
@@ -47,10 +49,17 @@ class BoardDataController(implicit options: GenerateOptions) extends Module {
   val io = IO(new Bundle {
     val uartClock = Input(Clock())
     val vgaClock = Input(Clock())
+    val cpuClock = Input(Clock())
     val cycles = Input(UInt(32.W))
+
+    val originPC = Input(UInt(32.W))
+    val interrupt = Output(Bool())
   })
 
   inside.cycles := io.cycles
+  inside.originPC := io.originPC
+  io.interrupt := withClock (io.cpuClock) { Debounce(outer.interrupt).onDown }
+
   inside.switches <> outer.switches.map(Debounce(_).out)
   inside.buttons.elements.foreach(pair => pair._2 := Debounce(outer.buttons.elements(pair._1).asUInt.asBool).out)
   inside.regable.leds <> outer.leds
@@ -67,8 +76,7 @@ class BoardDataController(implicit options: GenerateOptions) extends Module {
 
   val keyboard = Module(new Keyboard())
   val keyboardQueue = Module(new CrossClockQueue(KeyboardButton(), 32))
-  keyboard.io.in.rows <> outer.keyboard.rows.map(Debounce(_).out)
-  keyboard.io.in.cols <> outer.keyboard.cols.map(Debounce(_).out)
+  keyboard.io.in <> outer.keyboard
   keyboardQueue.io.clkEnq := clock
   keyboardQueue.io.clkDeq := clock
   keyboardQueue.io.enq <> keyboard.io.out
@@ -76,8 +84,8 @@ class BoardDataController(implicit options: GenerateOptions) extends Module {
 
   val display = Module(new DisplaySubsystem())
   display.io.vgaClock := io.vgaClock
-  display.io.out <> outer.vga
   display.io.vgaDataPort <> inside.vgaDataPort
+  outer.vga := RegNext(display.io.out)
 }
 
 class DisplaySubsystem(implicit options: GenerateOptions) extends Module {
@@ -89,18 +97,16 @@ class DisplaySubsystem(implicit options: GenerateOptions) extends Module {
   val io = IO(new Bundle {
     val vgaClock = Input(Clock())
     val out = new VGAOutBundle()
-    val vgaDataPort = new MemoryPort(14, 11)
+    val vgaDataPort = new MemoryPort(14, 16)
   })
 
   val vga = withClock(io.vgaClock) { Module(new VGATop(vgaParams)) }
   val console = withClock(io.vgaClock) { Module(new Console(vgaParams)) }
   val dataMem = Module(new BlockMemory(1, 256 * 64, ConsoleCharBundle.packedWidth))
-  val fontRom = Module(new BlockMemory(2, 0x100 * 16, 8, Some("font.txt")))
+  val fontRom = withClock(io.vgaClock) { Module(new BlockMemoryRom(2, 0x100 * 16, 8, Some("font.txt"))) }
   dataMem.io.clockB := io.vgaClock
-  fontRom.io.clockB := io.vgaClock
   dataMem.io2.init()
-  fontRom.io1.init()
-  fontRom.io2.init()
+  fontRom.io.init()
 
   require(dataMem.addrWidth == io.vgaDataPort.addrWidth)
   require(dataMem.dataWidth == io.vgaDataPort.dataWidth)
@@ -108,7 +114,7 @@ class DisplaySubsystem(implicit options: GenerateOptions) extends Module {
   vga.io.out <> io.out
 
   console.io.charRamData := dataMem.io2.setRead(console.io.charRamAddr)
-  console.io.fontRomData := fontRom.io2.setRead(console.io.fontRomAddr)
+  console.io.fontRomData := fontRom.io.setRead(console.io.fontRomAddr)
   console.io.out <> vga.io.in
   console.io.info <> vga.io.info
   io.vgaDataPort <> dataMem.io1

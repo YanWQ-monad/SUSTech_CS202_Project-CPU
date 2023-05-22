@@ -45,6 +45,8 @@ class MemoryPort(val addrWidth: Int, val dataWidth: Int) extends Bundle {
   }
 }
 
+// BlockMemory that calls the Vivado IP (if IP is enabled in `options`),
+// or otherwise use array as memory at out-of-Vivado simulation
 class BlockMemory(id: Int, depth: BigInt, val dataWidth: Int, simInitializeFile: Option[String] = None)(implicit options: GenerateOptions) extends Module {
   val addrWidth = LazyList.from(1).filter(x => (1 << x) >= depth).head
   val io1 = IO(new MemoryPort(addrWidth, dataWidth))

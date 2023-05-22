@@ -1,6 +1,6 @@
 package board
 
-import util.{GenerateOptions, Helper, Split, switch}
+import util.{Encoder, GenerateOptions, Helper, Split, switch}
 import chisel3._
 import chisel3.util._
 
@@ -15,7 +15,7 @@ class TubesInputBundle extends Bundle {
   val value = UInt(32.W)
   val enables = Vec(8, Bool())
   val mode = TubesMode()
-  val effect = TubesEffect()  // todo
+  val effect = TubesEffect()  // unused (unimplemented)
 }
 
 object TubesMode extends ChiselEnum {
@@ -38,15 +38,19 @@ class TubesController(implicit options: GenerateOptions) extends Module {
 //  }
   val scale = 12
 
+  // since we need to scan each digit every several milliseconds
+  // this frequency is much slower than the system clock, which MMCM does not support
+  // so we need to manually slow the clock down
+  // note: clock does not expected to be reset
   val tubeClock = withReset(0.B.asAsyncReset) {
-    // todo: init reg
     val clockCnt = RegInit(0.U(scale.W))
     clockCnt := clockCnt + 1.U
     clockCnt(scale - 1).asClock
   }
-  dontTouch(tubeClock)
+  dontTouch(tubeClock)  // tell Chisel don't touch, since we need it for timing constraints
 
   withClock(tubeClock) {
+    // decode the decimal into 8 digits (more are ignored)
     val decDigits = {
       val buffer = ListBuffer.empty[UInt]
       var current = io.in.value
@@ -59,8 +63,10 @@ class TubesController(implicit options: GenerateOptions) extends Module {
       buffer.toSeq
     }
 
+    // hexadecimal value is much simpler, just spilt them by 4 bits
     val hexDigits = Split(io.in.value, 8, 4)
 
+    // mux which group of digits is to be display
     val digits = Wire(Vec(8, UInt(4.W)))
     switch (io.in.mode)
       .is (TubesMode.Dec) { digits := decDigits }
@@ -68,7 +74,6 @@ class TubesController(implicit options: GenerateOptions) extends Module {
       .default { digits := DontCare }
 
     val tube = Module(new Tubes)
-
     tube.io.digits := digits.reverse
     tube.io.enables := io.in.enables
     tube.io.dots := 0.U(8.W).asBools
@@ -76,6 +81,9 @@ class TubesController(implicit options: GenerateOptions) extends Module {
   }
 }
 
+// given 8 digits, 8 dots (unused), and 8 enables (tell whether this digit should be display)
+// this module will translate the data to the raw board signal
+// that is, it will "scan" the digits in a very fast way, making them display simultaneously
 class Tubes extends Module {
   val io = IO(new Bundle {
     val digits = Input(Vec(8, UInt(4.W)))
@@ -85,24 +93,16 @@ class Tubes extends Module {
     val out = new TubesGroupBundle()
   })
 
+  // scan each row
   val now = RegInit(0.U(3.W))
   now := now + 1.U
 
-  val table = Seq(
-    0 -> "b10000000",
-    1 -> "b01000000",
-    2 -> "b00100000",
-    3 -> "b00010000",
-    4 -> "b00001000",
-    5 -> "b00000100",
-    6 -> "b00000010",
-    7 -> "b00000001",
-  ).map((o) => o._1.U(now.getWidth.W) -> o._2.U(8.W))
-
-  io.out.enable := (~(MuxLookup(now, table.head._2)(table) & io.enables.asUInt)).asBools
+  // since both enable and tube data is low valid, so we need to invert them
+  io.out.enable := (~(Encoder(8)(now) & io.enables.asUInt)).asBools
   io.out.tubes := (~Cat(io.dots(now), BcdToTube(io.digits(now)).asUInt)).asBools
 }
 
+// digits (0-F) --> tubes (tube enables)
 class BcdToTube extends Module {
   val io = IO(new Bundle {
     val digit = Input(UInt(4.W))
@@ -139,7 +139,8 @@ object BcdToTube {
   }
 }
 
-// todo: spec
+// a quick way to perform division by 10
+// given `in` as input, output quotient and remainder
 class DivTen extends Module {
   val io = IO(new Bundle {
     val in = Input(UInt(32.W))
@@ -165,15 +166,3 @@ object DivTen {
     (divTen.io.quotient, divTen.io.remainder)
   }
 }
-
-//object TempMain extends App {
-//  implicit val options = new GenerateOptions(
-//    false,
-//    false,
-//    100_000_000,
-//    10_000_000,
-//    8_500_000,
-//    40_000_000)
-//
-//  _root_.util.Emit(new TubesController(), args)
-//}

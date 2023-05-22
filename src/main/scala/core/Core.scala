@@ -6,119 +6,72 @@ import ip._
 import chisel3._
 
 class Core(implicit options: GenerateOptions) extends Module {
-  val io = IO(new RealBoardDataBundle())
-
-  val debug = if (options.enableDebugPorts) Some(IO(new Bundle {
-    val pc = Output(UInt(32.W))
-    val invalid = Output(Bool())
-    val debugRegAddr = Input(UInt(5.W))
-    val debugRegData = Output(SInt(32.W))
-  })) else None
-
-  val clocks = Module(new ClockWizard())
-
-  withClockAndReset(clocks.io.clockStd, clocks.reset) {
-    val pcLogic = Module(new PCLogic())
-
-    val id = Module(new Decoder())
-    val alu = Module(new ALU())
-    val cmp = Module(new Comparator())
-    val reg = Module(new RegisterFile())
-    val mem = Module(new Memory(32768))
-
-    val board = Module(new BoardDataController())
-
-    // Core (Sequential) logic
-    val cycles = RegInit(0.U(32.W))
-    val step = RegInit(1.B)
-    val pc = RegInit(0.U(32.W))
-    val pcOld = RegInit(0.U(32.W))
-
-    when(step) {
-      cycles := cycles + 1.U
-    }.otherwise {
-      pcOld := pc
-      pc := pcLogic.io.nextPc
-    }
-    step := !step
-
-    // Core (combination) logic
-    board.inside <> mem.io.external
-    io <> board.outer
-    board.io.cycles := cycles
-    board.io.uartClock := clocks.io.clockUart
-    board.io.vgaClock := clocks.io.clockVga
-
-    val exeResult = Wire(SInt(32.W))
-    mem.io.addrPC := pc
-    id.io.instruction := mem.io.dataPC
-
-    pcLogic.io.pc := pc
-    pcLogic.io.jump := id.io.jump
-    pcLogic.io.useReg := id.io.pcUseReg
-    pcLogic.io.imm := id.io.immPc
-    pcLogic.io.reg := reg.io.rs1Out.asUInt
-    pcLogic.io.cond := cmp.io.output && id.io.branch
-
-    reg.io.rs1Addr := id.io.rs1
-    reg.io.rs2Addr := id.io.rs2
-    reg.io.rdAddr := id.io.rd
-    reg.io.write := id.io.regWrite && step
-    reg.io.rdDataIn := Mux(id.io.memLoad, mem.io.dataOut, exeResult)
-
-    cmp.io.cmpType := id.io.cmpType
-    cmp.io.lhs := reg.io.rs1Out
-    cmp.io.rhs := Mux(id.io.useImm, id.io.imm, reg.io.rs2Out)
-    alu.io.aluType := id.io.aluType
-    alu.io.lhs := Mux(id.io.pcLink, pcOld.asSInt, reg.io.rs1Out)
-    alu.io.rhs := Mux(id.io.useImm, id.io.imm, reg.io.rs2Out)
-    alu.io.shamt := Mux(id.io.useImm, id.io.rs2, reg.io.rs2Out(4, 0).asUInt)
-    exeResult := Mux(id.io.useALU, alu.io.output, ZeroExt32(cmp.io.output).asSInt)
-
-    mem.io.addr := exeResult.asUInt
-    mem.io.memWidth := id.io.memWidth
-    mem.io.write := id.io.memWrite && step
-    mem.io.willWrite := id.io.memWrite
-    mem.io.enable := id.io.memLoad | id.io.memWrite
-    mem.io.dataIn := reg.io.rs2Out
-    mem.io.unsigned := id.io.memUnsigned
-    mem.io.step := step
-
-    // Debug ports
-    debug.foreach { debug =>
-      reg.debug.get.debugAddr := debug.debugRegAddr
-      debug.debugRegData := reg.debug.get.debugData
-      debug.pc := pc
-      debug.invalid := id.io.invalid
-    }
-  }
-}
-
-class PCLogic extends Module {
   val io = IO(new Bundle {
-    val pc = Input(UInt(32.W))
-    val cond = Input(Bool())
-    val jump = Input(Bool())
-    val useReg = Input(Bool())
-    val imm = Input(SInt(32.W))
-    val reg = Input(UInt(32.W))
+    val cycles = Output(UInt(32.W))
+    val external = Flipped(new BoardDataBundle())
 
-    val nextPc = Output(UInt(32.W))
+    val interrupt = Input(Bool())
+    val originPC = Output(UInt(32.W))
   })
 
-  val src = Mux(io.useReg, io.reg, io.pc)
-  val nextIns = io.pc + 4.U
-  io.nextPc := Mux(io.cond | io.jump, src + io.imm.asUInt, nextIns)
-}
+  val id = Module(new Decoder())
+  val alu = Module(new ALU())
+  val cmp = Module(new Comparator())
+  val reg = Module(new RegisterFile())
+  val mem = Module(new Memory(32768))
 
-object VerilogMain extends App {
-  implicit val options = new GenerateOptions(
-    false,
-    false,
-    100_000_000,
-    20_000_000,
-    12_500_000,
-    40_000_000)
+  // Core (Sequential) logic
+  val cycles = RegInit(0.U(32.W))
+  val stage = RegInit(1.B)
+  val pc = RegInit(0.U(32.W))
+  val pcOld = RegInit(0.U(32.W))
+  val originPC = RegInit(0.U(32.W))
+  val nextPc = Wire(0.U(32.W))
 
-  Emit(new Core(), args)
+  when(stage) {
+    cycles := cycles + 1.U
+  }.otherwise {
+    pcOld := pc
+
+    // interrupt handling
+    pc := Mux(io.interrupt, 0.U, nextPc)
+    when (io.interrupt) { originPC := pc }
+  }
+  stage := !stage
+
+  // Core (combination) logic
+  io.external <> mem.io.external
+  io.cycles := cycles
+  io.originPC := originPC
+
+  val exeResult = Wire(SInt(32.W))
+  mem.io.addrPC := pc
+  id.io.instruction := mem.io.dataPC
+
+  val PcSrc = Mux(id.io.pcUseReg, reg.io.rs1Out.asUInt, pc)
+  nextPc := Mux((cmp.io.output && id.io.branch) | id.io.jump, PcSrc + id.io.immPc.asUInt, pc + 4.U)
+
+  reg.io.rs1Addr := id.io.rs1
+  reg.io.rs2Addr := id.io.rs2
+  reg.io.rdAddr := id.io.rd
+  reg.io.write := id.io.regWrite && stage
+  reg.io.rdDataIn := Mux(id.io.memLoad, mem.io.dataOut, exeResult)
+
+  cmp.io.cmpType := id.io.cmpType
+  cmp.io.lhs := reg.io.rs1Out
+  cmp.io.rhs := Mux(id.io.useImm, id.io.imm, reg.io.rs2Out)
+  alu.io.aluType := id.io.aluType
+  alu.io.lhs := Mux(id.io.pcLink, pcOld.asSInt, reg.io.rs1Out)
+  alu.io.rhs := Mux(id.io.useImm, id.io.imm, reg.io.rs2Out)
+  alu.io.shamt := Mux(id.io.useImm, id.io.rs2, reg.io.rs2Out(4, 0).asUInt)
+  exeResult := Mux(id.io.useALU, alu.io.output, ZeroExt32(cmp.io.output).asSInt)
+
+  mem.io.addr := exeResult.asUInt
+  mem.io.memWidth := id.io.memWidth
+  mem.io.write := id.io.memWrite && stage  // only perform write on stage=1
+  mem.io.willWrite := id.io.memWrite
+  mem.io.enable := id.io.memLoad | id.io.memWrite
+  mem.io.dataIn := reg.io.rs2Out
+  mem.io.unsigned := id.io.memUnsigned
+  mem.io.stage := stage
 }

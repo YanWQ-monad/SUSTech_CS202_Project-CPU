@@ -18,6 +18,7 @@ class Comparator extends Module {
   impl.io.rhs := io.rhs
   io.output := impl.io.output
 
+  // use three control signals to control the lower-level comparator
   def assignToImpl(equals: => Data, invert: => Data, unsigned: => Data): Unit = {
     impl.io.equals := equals
     impl.io.invert := invert
@@ -38,6 +39,8 @@ object CmpType extends ChiselEnum {
   val Eq, Ne, Lt, Ge, LtU, GeU = Value
 }
 
+// lower-level comparator, only compare equals and less-than
+// with control of `unsigned` (the input) and `invert` (the result)
 class ComparatorImpl extends Module {
   val io = IO(new Bundle {
     val equals = Input(Bool())

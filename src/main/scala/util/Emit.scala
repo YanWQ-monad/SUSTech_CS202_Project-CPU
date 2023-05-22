@@ -1,6 +1,7 @@
 package util
 
 import chisel3._
+import circt.stage.ChiselStage
 
 object Emit {
   def apply(gen: => RawModule, args: Array[String]): Unit = {
@@ -10,7 +11,7 @@ object Emit {
       args
     }
 
-    circt.stage.ChiselStage.emitSystemVerilogFile(
+    ChiselStage.emitSystemVerilogFile(
       gen,
       emitArgs,
       firtoolOpts = Array("-disable-all-randomization", "-strip-debug-info")

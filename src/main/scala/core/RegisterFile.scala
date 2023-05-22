@@ -3,6 +3,7 @@ package core
 import util.GenerateOptions
 import chisel3._
 
+// just a register table
 class RegisterFile(implicit options: GenerateOptions) extends Module {
   val io = IO(new Bundle {
     val rs1Addr = Input(UInt(5.W))
