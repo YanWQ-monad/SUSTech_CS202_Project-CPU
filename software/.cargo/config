@@ -1,0 +1,7 @@
+[build]
+target = "riscv32i-unknown-none-elf"
+
+[target.riscv32i-unknown-none-elf]
+rustflags = [
+ "-Clink-arg=-Tsrc/linker.ld", "-Cforce-frame-pointers=yes"
+]

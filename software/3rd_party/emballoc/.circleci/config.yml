@@ -1,0 +1,127 @@
+version: 2.1
+
+orbs:
+  codecov: codecov/codecov@3.2.3
+
+jobs:
+  build:
+    docker:
+      - image: rust:latest
+    steps:
+      - checkout
+      - run:
+          name: Build the source
+          command: cargo build
+
+  test:
+    docker:
+      - image: rust:latest
+    steps:
+      - checkout
+      - run:
+          name: Run the tests
+          command: cargo test
+
+  miri:
+    parameters:
+      target:
+        type: string
+    docker:
+      - image: jfrimmel/miri:nightly-2022-08-22
+    steps:
+      - checkout
+      - run:
+          name: Run the tests
+          command: MIRIFLAGS='-Zmiri-symbolic-alignment-check' cargo miri test --target << parameters.target >> --lib
+
+  coverage:
+    docker:
+      - image: jfrimmel/coverage
+    steps:
+      - checkout
+      - run:
+          name: Record testing coverage
+          command: |
+            # build and run all tests. This produces a single .profraw-file per
+            # test.
+            RUSTFLAGS="-C instrument-coverage" LLVM_PROFILE_FILE="emballoc-%m.profraw" cargo test
+            # merge the individual runs into a collective .profdata-file
+            llvm-profdata merge -sparse emballoc-*.profraw -o emballoc.profdata
+
+            # collect the names of the binaries and convert them to command line
+            # parameters. This is adopted from https://doc.rust-lang.org/rustc/instrument-coverage.html#tips-for-listing-the-binaries-automatically
+            binaries=($(RUSTFLAGS="-C instrument-coverage" cargo test --tests --quiet --no-run --message-format=json | jq -r "select(.profile.test == true) | .filenames[]" | grep -v dSYM -))
+            binaries=("${binaries[@]/#/-object=}")
+
+            # Show the precise coverage, so that it shows up in the CI logs and
+            # convert it into an `lcov` file, so that it can be uploaded (this
+            # is one of the few supported format according to
+            # https://stackoverflow.com/a/50884416).
+            llvm-cov report --ignore-filename-regex='/usr/local/cargo/registry' --instr-profile=emballoc.profdata "${binaries[@]}" --use-color
+            llvm-cov export --ignore-filename-regex='/usr/local/cargo/registry' --instr-profile=emballoc.profdata "${binaries[@]}" -format=lcov > coverage.lcov
+      - codecov/upload
+
+  msrv:
+    docker:
+      - image: rust:1.57
+    steps:
+      - checkout
+      - run:
+          name: Build the source
+          command: cargo check
+
+  style:
+    docker:
+      - image: rust:latest
+    steps:
+      - checkout
+      - run:
+          name: Install linter and formatter
+          command: rustup component add rustfmt clippy
+      - run:
+          name: Check formatting
+          command: cargo fmt --check
+      - run:
+          name: Run linter
+          command: |
+            cargo clippy -- \
+              -D clippy::cargo \
+              -D clippy::complexity \
+              -D clippy::nursery \
+              -D clippy::pedantic \
+              -D clippy::perf \
+              -D clippy::style \
+              -D clippy::suspicious \
+              -F clippy::dbg_macro \
+              -F clippy::print_stdout \
+              -F clippy::print_stderr \
+              -F clippy::todo \
+              -F clippy::unimplemented \
+              -D clippy::undocumented_unsafe_blocks
+
+  doc:
+    docker:
+      - image: rust:latest
+    steps:
+      - checkout
+      - run:
+          name: Build the documentation
+          command: cargo doc
+
+workflows:
+  ci:
+    jobs:
+      - build
+      - test:
+          requires: [build]
+      - miri:
+          requires: [build]
+          matrix:
+            parameters:
+              target:
+                ["x86_64-unknown-linux-gnu", "mips64-unknown-linux-gnuabi64"]
+      - coverage:
+          requires: [build]
+      - msrv
+      - style
+      - doc

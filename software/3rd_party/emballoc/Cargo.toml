@@ -1,0 +1,14 @@
+[package]
+name = "emballoc"
+description = "Simple but reliable memory allocator for embedded Rust and #![no_std]"
+version = "0.1.2"
+edition = "2021"
+categories = ["memory-management", "no-std", "embedded", "algorithms"]
+keywords = ["allocator", "embedded", "no-std", "no_std"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jfrimmel/emballoc"
+documentation = "https://docs.rs/emballoc"
+rust-version = "1.57"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
