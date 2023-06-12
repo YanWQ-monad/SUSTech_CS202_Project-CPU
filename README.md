@@ -69,8 +69,8 @@
 |--------------------------------------------------|---------|
 | [chisel/](chisel)                                | Chisel 源代码 |
 | [font/](font)                                    | VGA 字符字体（基于 Ark Pixel） |
+| [program/](program)                              | 软件部分（使用 Rust 编写） |
 | [simulation/](simulation)                        | 仿真必要文件（含差分测试） |
-| [software/](software)                            | 软件部分（使用 Rust 编写） |
 | [vivado/](vivado)                                | Vivado 必要文件 |
 | &emsp; [constraints.xdc](vivado/constraints.xdc) | Minisys 约束文件 |
 | &emsp; [ip/](vivado/ip)                          | Vivado IP 核 |
