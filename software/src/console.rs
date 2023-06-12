@@ -31,7 +31,8 @@ impl Write for Stdout {
 }
 
 pub fn print_str(s: &str) {
-    Stdout.write_str(s);
+    let result = Stdout.write_str(s);
+    unsafe { result.unwrap_unchecked() }
 }
 
 pub fn print(args: fmt::Arguments) {
@@ -72,7 +73,7 @@ pub fn get_char(echo: bool) -> u8 {
 pub fn read_line(buf: &mut [u8]) -> &str {
     let mut idx: usize = 0;
 
-    loop {
+    while idx < buf.len() {
         match get_char(true) {
             UART_NEWLINE => break,
             UART_BACKSPACE => {
@@ -83,6 +84,10 @@ pub fn read_line(buf: &mut [u8]) -> &str {
                 idx += 1;
             }
         }
+    }
+
+    if idx > buf.len() {
+        unsafe { core::hint::unreachable_unchecked() }
     }
 
     unsafe { core::str::from_utf8_unchecked(&buf[..idx]) }

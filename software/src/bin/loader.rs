@@ -3,7 +3,6 @@
 
 use core::ptr::write_volatile;
 
-#[macro_use]
 extern crate cpu_lib;
 
 use cpu_lib::prelude::*;
@@ -18,7 +17,13 @@ fn main() -> i32 {
     loop {
         print_str("[loader] Program size (bytes): ");
         let line = read_line(&mut buf);
-        let size: usize = line.parse().unwrap();
+
+        let size: usize = if let Ok(size) = line.parse() {
+            size
+        } else {
+            print_str("[loader] Invalid number!");
+            continue
+        };
 
         print_str("[loader] Transfer the data below\r\n");
         unsafe {

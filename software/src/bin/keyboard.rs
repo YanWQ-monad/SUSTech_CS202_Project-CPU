@@ -17,8 +17,8 @@ fn read_number() -> u32 {
     loop {
         while !keyboard_ready() {
             if read_button(Button::Left) {
-                en = en >> 1;
-                v = v / 10;
+                en >>= 1;
+                v /= 10;
                 set_tube_value_option(Some(v));
                 set_tube_enable(en);
                 while read_button(Button::Left) {}

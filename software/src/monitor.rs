@@ -40,7 +40,7 @@ pub fn init() {
 
 #[inline]
 fn offset(x: usize, y: usize) -> usize {
-    assert!(x < SCREEN_BUFFER_MULTIPLIER && y < 64);
+    // assert!(x < SCREEN_BUFFER_MULTIPLIER && y < 64);
     y * SCREEN_BUFFER_MULTIPLIER + x
 }
 

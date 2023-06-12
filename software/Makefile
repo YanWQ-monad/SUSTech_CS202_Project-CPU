@@ -54,6 +54,7 @@ $(PROGRAM_ASM): $(TARGET_DIR)/%.asm: $(CARGO_TARGET_DIR)/% | $(TARGET_DIR)
 
 $(PROGRAM_BIN): $(TARGET_DIR)/%.bin: $(CARGO_TARGET_DIR)/% | $(TARGET_DIR)
 	$(OBJCOPY) $< --strip-all -O binary $@
+	head -c $$((4 - $$(stat -f %z $@) % 4)) /dev/zero >> $@
 
 $(PROGRAM_TXT): $(TARGET_DIR)/%.txt: $(TARGET_DIR)/%.bin | $(TARGET_DIR)
 	xxd -ps -c 4 -e $< | awk '{ print $$2 }' > $@
