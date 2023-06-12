@@ -66,7 +66,7 @@
 ## 目录结构
 
 |                        文件(夹)                   |   备注   |
-|--------------------------------------------------|---------|
+|--------------------------------------------------|----------|
 | [chisel/](chisel)                                | Chisel 源代码 |
 | [font/](font)                                    | VGA 字符字体（基于 Ark Pixel） |
 | [program/](program)                              | 软件部分（使用 Rust 编写） |
@@ -115,6 +115,8 @@
 ~~然后在上面两者的加持下，整个项目我应该写了不到 50 行的 Verilog 和不到 50 行的汇编。
 （看右边 GitHub 的统计信息，也可以发现 Verilog 和汇编的占比确实不多。）~~
 
+当然也是多亏了交叉编译，我才能把俄罗斯方块移植到这个 CPU 上，不然手写汇编肯定是会疯掉的。
+
 ---
 
 然后到了测试部分，众所周知，测试 CPU 写得对不对也是一个十分痛苦的过程。
@@ -130,7 +132,7 @@
 所以我们就要把这个检查的过程交给程序来做。这里推荐“差分测试”。
 首先在 Verilator 仿真器下 ~~（Vivado 你\*\*谁）~~，可以通过自己编写 C++ 代码和仿真器进行交互，当然也可以获取到每条信号的值是多少。
 然后只要把这些信号的值和标准的值对比一下，就知道对不对了。
-那…这个“标准的值”哪来呢？这里可以用 unicorn 仿真器（这两个“仿真器”的意思是有点区别的），它是一个开源的轻量级的支持 RISC-V 32 位的仿真器，~~几千 star 的开源项目肯定靠谱（至少比自己写靠谱）~~。
+那…这个“标准的值”哪来呢？这里可以用 unicorn 仿真器（这两个“仿真器”的意思是有点区别的），它是一个开源的轻量级的支持 RISC-V 32 位的仿真器，~~几千 star 的开源项目肯定靠谱（至少比自己写的靠谱）~~。
 于是我们就可以在每一轮，首先让自己的 CPU 跑一个周期，再让仿真器跑一个周期，然后对比一下两者的寄存器的值是否一致，如果不一致就打印出当前指令的细节，然后停止。
 这样就可以非常方便地定位到代码错在哪个地方，而且还可以生成波形图，通过比较错误位置的一些信号的值，就可以很容易知道是哪里错了。
 这…不比上板调试来得舒服多了？
@@ -138,3 +140,20 @@
 ---
 
 ~~唔，虽然写了很多，但是感觉都是很笼统的东西，放假有时间了希望能把这些东西写几篇仔细的 tutorial 出来。~~
+
+## 致谢
+
+- [tetrs](https://github.com/freymo/tetrs)，一个用 Rust 编写的命令行俄罗斯方块。
+  本项目把图形输出部分适配到本 CPU 上，并且只保留了其核心游戏部分。
+- [Project F](https://projectf.io/)，参考了 Display Signals 中部分信号的设计，以及参考了 VGA 仿真部分。
+- [fpga4fun - Serial interface](https://www.fpga4fun.com/SerialInterface.html)，UART 模块原型。
+- [方舟像素字体](https://github.com/TakWolf/ark-pixel-font)，其 16px 等宽的 "Basic Latin" 部分用作 VGA 显示的字体。
+- [rCore Tutorial Book](https://rcore-os.cn/rCore-Tutorial-Book-v3/index.html)，参考借鉴了它的一些代码来搭建 Rust 交叉编译环境。
+- [DiffTest](https://oscpu.github.io/ysyx/events/2021-07-17_Difftest/DiffTest-一种高效的处理器验证方法.pdf)，一份关于差分测试的介绍。
+- ~~[VGA Tangram](https://github.com/YanWQ-monad/SUSTech_CS207_Project-Tangram)，我自己的数字逻辑的项目，有些 VGA 和数码管的代码就是参考自这里。~~
+
+框架部分：
+
+- [Unicorn Engine](https://www.unicorn-engine.org/)，是本项目中差分测试的标准参考。
+- [Verilator](https://www.veripool.org/verilator/)，高效 Verilog 仿真器。
+- [Chisel](https://www.chisel-lang.org/)，“Chisel/FIRRTL Hardware Compiler Framework”。
