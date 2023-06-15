@@ -6,6 +6,7 @@
 
 ![](https://github.com/YanWQ-monad/SUSTech_CS202_Project-CPU/assets/20324409/d366a6d6-91e1-4d1f-aff7-26cf9c334b64)
 
+
 ## 功能
 
 ### CPU 核心
@@ -45,7 +46,7 @@
   - `0xFFFFF030`(`w`)：数码管模式（0: 10 进制，1: 16 进制）
   - `0xFFFFF038`(`w`)：数码管数值
   - `0xFFFFF03C`(`w`)：数码管每个数位的 enable（用 0-7 共 8 个二进制位表示某个数码管是否显示）
-  - `0xFFFFF040`(`r`)：中断前的 PC ~~（水分用的）~~
+  - `0xFFFFF040`(`r`)：中断前的 PC ~~（骗分用的）~~
   - `0xFFFFF044`(`r`)：随机数发生器
   - `0xFFFFF1__`(`r`)：24 个 switches（每个 switch 占 4 byte）
   - `0xFFFFF2__`(`w`)：24 个 LED（每个 LED 占 4 byte）
@@ -57,23 +58,33 @@
 
 
 ### 其它
+
+- 可以通过板子上 P20 的 reset 按钮进行 reset
+  - 此操作会清空电路中大部分 `reg` 的值（内存、寄存器不会清空），然后跳转到 `0x00000000` 的 bootloader 处重新开始执行
 - 软件部分使用 Rust 进行编写，通过交叉编译编译到二进制后可加载到开发板上
   - 移植了 [tetrs](https://github.com/freymo/tetrs) 俄罗斯方块，能成功运行
 - 使用 Verilator 进行仿真，在此基础上：
   - 编写差分测试（支持模拟 UART I/O），通过差分测试验证正确性（此时仿真速度约为每秒 20 万周期）
   - 调用 SDL 库绘制 VGA 输出，可以在不上板的情况下粗略测试 VGA 输出是否正确
+- 时钟频率：
+  - CPU 核心：40 MHz
+  - UART：12.5 MHz（再手动用 151/1024 分频到 1.84 MHz，此频率约为 115200 Hz 的 16 倍）
+  - VGA：40 MHz
+
 
 ## 目录结构
 
 |                        文件(夹)                   |   备注   |
 |--------------------------------------------------|----------|
-| [chisel/](chisel)                                | Chisel 源代码 |
+| [chisel/](chisel)                                | **硬件部分**（Chisel 代码） |
+| [program/](program)                              | **软件部分**（使用 Rust 编写） |
 | [font/](font)                                    | VGA 字符字体（基于 Ark Pixel） |
-| [program/](program)                              | 软件部分（使用 Rust 编写） |
-| [simulation/](simulation)                        | 仿真必要文件（含差分测试） |
+| [simulation/](simulation)                        | 仿真相关文件（含差分测试） |
 | [vivado/](vivado)                                | Vivado 必要文件 |
 | &emsp; [constraints.xdc](vivado/constraints.xdc) | Minisys 约束文件 |
 | &emsp; [ip/](vivado/ip)                          | Vivado IP 核 |
+| [generated/](generated)                          | 一些编译好的东西，应该可以直接用 |
+
 
 ## 使用
 
@@ -85,6 +96,8 @@
 4. 新建 Vivado 项目，导入 vivado 目录下的 IP 核心以及约束文件，并且指定好上述两个 coe 文件。
 5. 导入第 2 步生成的 `Top.sv`，综合、实现、生成比特流，就可以烧板了。
 6. 连接 UART，就可以加载程序：首先发送一个整数表示程序长度，然后再发送相应长度的二进制内容，然后 bootloader 就会运行它。
+
+或者可以直接用编译好的，见 [generated](generated)。
 
 ## 碎碎念
 
@@ -108,7 +121,7 @@
 并且解决问题的最好方法就是解决问题本身——不写汇编不就行了？  
 现在有很多编程语言（例如 C++、Rust）都提供交叉编译功能，即可以在自己的电脑上写 C++ 或者 Rust 代码，
 然后编译器可以将代码编译到另一个架构（比如说，Mips）的二进制文件，就能直接放在 CPU 运行了。
-~~（其实计组 OJ 也可以入法炮制）~~
+~~（其实计组 OJ 也可以如法[炮制](https://lab.victorica.dev/ptilopsis)）~~
 毕竟写高级语言非常舒服，而且编译器的编译肯定是不会出错的（退一万步来说，至少比我强），所以写起来就很舒服，不用担心汇编那一堆乱七八糟的东西。  
 当然，过程中可能还要学会使用一些别的东西，比如说链接脚本。~~如果有时间的话我看看能不能写一个 tutorial。~~
 
@@ -140,6 +153,7 @@
 ---
 
 ~~唔，虽然写了很多，但是感觉都是很笼统的东西，放假有时间了希望能把这些东西写几篇仔细的 tutorial 出来。~~
+
 
 ## 致谢
 
