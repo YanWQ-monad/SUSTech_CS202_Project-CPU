@@ -1,0 +1,3 @@
+# generated files
+generated/** linguist-generated
+generated/README.md linguist-documentation
