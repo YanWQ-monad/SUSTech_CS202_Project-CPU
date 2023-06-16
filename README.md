@@ -4,7 +4,7 @@
   
 </div>
 
-![](https://github.com/YanWQ-monad/SUSTech_CS202_Project-CPU/assets/20324409/d366a6d6-91e1-4d1f-aff7-26cf9c334b64)
+![](https://github.com/YanWQ-monad/SUSTech_CS202_Project-CPU/assets/20324409/a0864ac3-15db-4f80-967f-c922ea654c0d)
 
 
 ## 功能
